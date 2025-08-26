@@ -10,7 +10,7 @@ O pipeline de dados foi orquestrado usando **Apache Airflow**, e a solução uti
 
 O projeto está organizado na seguinte estrutura de diretórios:
 
-desafio-LHED-indicium/
+```desafio-LHED-indicium/
 ├── dags/
 │   └── data_pipeline.py
 ├── data_fonte/
@@ -21,7 +21,7 @@ desafio-LHED-indicium/
 ├── logs/
 ├── docker-compose.yml
 └── README.md
-
+```
 
 ## Pré-requisitos
 
