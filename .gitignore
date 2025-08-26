@@ -1,0 +1,8 @@
+dbdata/
+dw_data/
+logs/
+dags/data_extraida/
+
+__pycache__/
+.env
+venv/
