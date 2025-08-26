@@ -1,5 +1,6 @@
 dbdata/
 dw_data/
+airflow_db/
 logs/
 dags/data_extraida/
 

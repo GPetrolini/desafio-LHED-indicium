@@ -1,12 +1,85 @@
 services:
   db:
     image: postgres:16
+    container_name: banvic_source_db
     environment:
       POSTGRES_DB: banvic
       POSTGRES_USER: data_engineer
       POSTGRES_PASSWORD: v3rysecur&pas5w0rd
     volumes:
       - ./dbdata:/var/lib/postgresql/data
-      - ./banvic.sql:/docker-entrypoint-initdb.d/banvic.sql
+      - ./data_fonte:/docker-entrypoint-initdb.d
     ports:
       - 55432:5432
+    restart: always
+
+  dw:
+    image: postgres:16
+    container_name: banvic_dw
+    environment:
+      POSTGRES_DB: dw_banvic
+      POSTGRES_USER: data_engineer
+      POSTGRES_PASSWORD: v3rysecur&pas5w0rd
+    volumes:
+      - ./dw_data:/var/lib/postgresql/data
+    ports:
+      - 55433:5432
+    restart: always
+
+  airflow_db:
+    image: postgres:16
+    container_name: airflow_db
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - 55434:5432
+    volumes:
+      - ./airflow_db:/var/lib/postgresql/data
+    restart: always
+
+  airflow_webserver:
+    image: apache/airflow:2.8.2
+    container_name: airflow_webserver
+    depends_on:
+      - airflow_db
+      - db
+      - dw
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow_db:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE=America/Sao_Paulo
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres pandas psycopg2-binary
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./data_fonte:/opt/airflow/data_fonte
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data_extraida:/opt/airflow/data_extraida
+    command: webserver
+    restart: always
+
+  airflow_scheduler:
+    image: apache/airflow:2.8.2
+    container_name: airflow_scheduler
+    depends_on:
+      - airflow_db
+      - db
+      - dw
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow_db:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres pandas psycopg2-binary
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./data_fonte:/opt/airflow/data_fonte
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data_extraida:/opt/airflow/data_extraida
+    command: scheduler
+    restart: always
