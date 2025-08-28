@@ -15,14 +15,14 @@ default_args = {
 }
 
 
-PASTA_DESTINO = "/opt/airflow/data_extraida"
-TABELAS = [
+pasta_destino = "/opt/airflow/data_extraida"
+tabelas = [
     "agencias",
     "clientes",
     "colaboradores",
     "contas",
     "propostas_credito"]
-SQL_DROP_TABLE = "DROP TABLE IF EXISTS {tabela_nome};"
+drop_table = "DROP TABLE IF EXISTS {tabela_nome};"
 
 with DAG(
     dag_id="banvic_data_pipeline",
@@ -62,17 +62,17 @@ with DAG(
         return extrai_tabela
 
     tasks_extracao_tabelas = []
-    for tabela in TABELAS:
+    for tabela in tabelas:
         query = f"SELECT * FROM {tabela}"
         task_tabela = extracao_tabela(tabela, query)(
             sql_query=query,
             table=tabela,
-            file_path=os.path.join(PASTA_DESTINO, "{{ ds }}", "sql"),
+            file_path=os.path.join(pasta_destino, "{{ ds }}", "sql"),
         )
         tasks_extracao_tabelas.append(task_tabela)
 
     arquivo_transacoes = extrai_csv_transacoes(
-        file_path=os.path.join(PASTA_DESTINO, "{{ ds }}", "csv")
+        file_path=os.path.join(pasta_destino, "{{ ds }}", "csv")
     )
 
     def carrega_datawarehouse():
@@ -91,7 +91,7 @@ with DAG(
                 )
 
         arquivos_para_dw = tasks_extracao_tabelas + [arquivo_transacoes]
-        carrega = carrega_dw(arquivos=arquivos_para_dw, drop_query=SQL_DROP_TABLE)
+        carrega = carrega_dw(arquivos=arquivos_para_dw, drop_query=drop_table)
         [arquivo_transacoes, *tasks_extracao_tabelas] >> carrega
 
 carrega_datawarehouse()
