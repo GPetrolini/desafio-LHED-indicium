@@ -75,23 +75,50 @@ with DAG(
         file_path=os.path.join(pasta_destino, "{{ ds }}", "csv")
     )
 
-    def carrega_datawarehouse():
-        @task(task_id="carrega_dw")
-        def carrega_dw(arquivos: list[str], drop_query: str):
+    @task(task_id="carrega_csv_transacoes")
+    def carrega_csv_transacoes(arquivo: str, drop_query: str):
+        pg_dw = PostgresHook(postgres_conn_id="banvic_dw")
+        tabela_nome = os.path.basename(arquivo).replace(".csv", "")
+        df_tabela = pd.read_csv(arquivo)
+        pg_dw.run(drop_query.format(tabela_nome=tabela_nome))
+        df_tabela.to_sql(
+            tabela_nome,
+            con=pg_dw.get_sqlalchemy_engine(),
+            if_exists="replace",
+            index=False,
+        )
+
+    def carrega_tabela(tabela: str):
+        @task(task_id=f"carrega_dw_{tabela}")
+        def carrega_dw(arquivo: str, drop_query: str):
             pg_dw = PostgresHook(postgres_conn_id="banvic_dw")
-            for arquivo in arquivos:
-                tabela_nome = os.path.basename(arquivo).replace(".csv", "")
-                df_tabela = pd.read_csv(arquivo)
-                pg_dw.run(drop_query.format(tabela_nome=tabela_nome))
-                df_tabela.to_sql(
-                    tabela_nome,
-                    con=pg_dw.get_sqlalchemy_engine(),
-                    if_exists="replace",
-                    index=False,
-                )
+            tabela_nome = os.path.basename(arquivo).replace(".csv", "")
+            df_tabela = pd.read_csv(arquivo)
+            pg_dw.run(drop_query.format(tabela_nome=tabela_nome))
+            df_tabela.to_sql(
+                tabela_nome,
+                con=pg_dw.get_sqlalchemy_engine(),
+                if_exists="replace",
+                index=False,
+            )
+        return carrega_dw
 
-        arquivos_para_dw = tasks_extracao_tabelas + [arquivo_transacoes]
-        carrega = carrega_dw(arquivos=arquivos_para_dw, drop_query=drop_table)
-        [arquivo_transacoes, *tasks_extracao_tabelas] >> carrega
+    tasks_carregamento = []
+    for tabela in tabelas:
+        carrega = carrega_tabela(tabela)(
+            arquivo=os.path.join(
+                pasta_destino, "{{ ds }}", "sql", f"{tabela}.csv"
+            ),
+            drop_query=drop_table,
+        )
+        tasks_carregamento.append(carrega)
 
-carrega_datawarehouse()
+    carrega_transacoes = carrega_csv_transacoes(
+        arquivo=os.path.join(pasta_destino, "{{ ds }}", "csv", "transacoes.csv"),
+        drop_query=drop_table,
+    )
+
+    for i, extrai_task in enumerate(tasks_extracao_tabelas):
+        extrai_task >> tasks_carregamento[i]
+
+    arquivo_transacoes >> carrega_transacoes
