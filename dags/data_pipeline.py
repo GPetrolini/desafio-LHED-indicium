@@ -5,6 +5,15 @@ from airflow import DAG
 from airflow.decorators import task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 import pendulum
+from datetime import datetime
+
+default_args = {
+    "email_on_failure": True,
+    "email_on_retry": False,
+    "start_date": datetime(2025, 8, 25),
+    "retries": 1,
+}
+
 
 PASTA_DESTINO = "/opt/airflow/data_extraida"
 TABELAS = [
@@ -41,7 +50,7 @@ with DAG(
         df_transacoes.to_csv(arquivo_destino, index=False)
         return arquivo_destino
 
-    def criar_task_extracao_tabela(tabela: str, query: str):
+    def extracao_tabela(tabela: str, query: str):
         @task(task_id=f"extracao_tabela_{tabela}")
         def extrai_tabela(sql_query: str, table: str, file_path: str) -> str:
             os.makedirs(file_path, exist_ok=True)
@@ -55,7 +64,7 @@ with DAG(
     tasks_extracao_tabelas = []
     for tabela in TABELAS:
         query = f"SELECT * FROM {tabela}"
-        task_tabela = criar_task_extracao_tabela(tabela, query)(
+        task_tabela = extracao_tabela(tabela, query)(
             sql_query=query,
             table=tabela,
             file_path=os.path.join(PASTA_DESTINO, "{{ ds }}", "sql"),
@@ -66,8 +75,8 @@ with DAG(
         file_path=os.path.join(PASTA_DESTINO, "{{ ds }}", "csv")
     )
 
-    def carrega_datawarehouse(tabela: str, query: str):
-        @task(task_id="carrega_dw_{tabela}")
+    def carrega_datawarehouse():
+        @task(task_id="carrega_dw")
         def carrega_dw(arquivos: list[str], drop_query: str):
             pg_dw = PostgresHook(postgres_conn_id="banvic_dw")
             for arquivo in arquivos:
@@ -84,3 +93,5 @@ with DAG(
         arquivos_para_dw = tasks_extracao_tabelas + [arquivo_transacoes]
         carrega = carrega_dw(arquivos=arquivos_para_dw, drop_query=SQL_DROP_TABLE)
         [arquivo_transacoes, *tasks_extracao_tabelas] >> carrega
+
+carrega_datawarehouse()
